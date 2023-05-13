@@ -7,7 +7,7 @@ from functools import partial
 BUSES = {}
 
 
-async def server_8080(request):
+async def listen_to_updates(request):
 
     ws = await request.accept()
     while True:
@@ -15,12 +15,11 @@ async def server_8080(request):
             bus_data = json.loads(await ws.get_message())
             bus_id = bus_data['busId']
             BUSES[bus_id] = bus_data
-            await trio.sleep(1)
         except ConnectionClosed:
             break
 
 
-async def server_8000(request):
+async def put_buses_on_map(request):
     ws = await request.accept()
     while True:
         try:
@@ -37,8 +36,8 @@ async def server_8000(request):
 async def main():
     logging.basicConfig(level=logging.INFO)
     async with trio.open_nursery() as nursery:
-        nursery.start_soon(partial(serve_websocket, server_8000, '127.0.0.1', 8000, ssl_context=None))
-        nursery.start_soon(partial(serve_websocket, server_8080, '127.0.0.1', 8080, ssl_context=None))
+        nursery.start_soon(partial(serve_websocket, put_buses_on_map, '127.0.0.1', 8000, ssl_context=None))
+        nursery.start_soon(partial(serve_websocket, listen_to_updates, '127.0.0.1', 8080, ssl_context=None))
         logging.info('servers were started!')
 
 

@@ -1,34 +1,18 @@
 import random
-from itertools import cycle, islice
-import trio
 import json
+import logging
 import os
+from itertools import cycle
+import trio
 from trio_websocket import open_websocket_url
 
+BUSES_PER_ROUTE = 25
+CHANNELS_AMOUNT = 10
 
-BUSES_PER_ROUTE = 1
-CHANNELS_AMOUNT = 1
-
-
-async def send_updates(server_address, receive_channel):
-
-    print(555)
-    while True:
-        try:
-            print(f'ws://{server_address}/')
-            print(123)
-            async with open_websocket_url(f'ws://{server_address}/') as ws:
-                print(0)
-                async with receive_channel:
-                    print(1)
-                    async for bus in receive_channel:
-                        await ws.send_message(json.dumps(bus, ensure_ascii=True))
-                        await trio.sleep(1)
-        except OSError:
-            print('Connection attempt failed: %s')
+logger = logging.getLogger(__name__)
 
 
-async def load_routes(directory_path='routes'):
+def load_routes(directory_path='routes'):
     for filename in os.listdir(directory_path):
         if filename.endswith(".json"):
             filepath = os.path.join(directory_path, filename)
@@ -36,50 +20,50 @@ async def load_routes(directory_path='routes'):
                 yield json.load(file)
 
 
-async def run_bus(route, bus_index, bus_id, send_channel):
+async def run_bus(route, start_position, bus_id, send_channel):
 
-    coordinates = cycle(islice(route['coordinates'], bus_index, None))
+    cycle_route = route['coordinates'][start_position:] + list(reversed(route['coordinates'][start_position:]))
+
+    for lat, lng in cycle(cycle_route):
+        bus = {
+            "busId": bus_id,
+            "lat": lat,
+            "lng": lng,
+            "route": route['name']
+        }
+
+        await send_channel.send(bus)
+        await trio.sleep(1)
+
+
+async def send_updates(server_address, receive_channel):
 
     while True:
-
-        try:
-
-            for coordinate in coordinates:
-
-                bus = {
-                    "busId": bus_id,
-                    "lat": coordinate[0],
-                    "lng": coordinate[1],
-                    "route": route['name']
-                }
-                await send_channel.send(bus)
-                print('лол')
-                await trio.sleep(1)
-
-        except StopIteration:
-
-            coordinates = cycle(route['coordinates'])
+        async with open_websocket_url(server_address) as ws:
+            async for message in receive_channel:
+                await ws.send_message(json.dumps(message, ensure_ascii=True))
 
 
 async def main():
 
+    logging.basicConfig(level=logging.INFO)
+
+    memory_channels = [trio.open_memory_channel(0) for _ in range(CHANNELS_AMOUNT)]
+
     async with trio.open_nursery() as nursery:
-        send_channels = []
-        receive_channels = []
 
-        for _ in range(CHANNELS_AMOUNT):
-            send_channel, receive_channel = trio.open_memory_channel(0)
-            send_channels.append(send_channel)
-            receive_channels.append(receive_channel)
-            nursery.start_soon(send_updates, '127.0.0.1:8080', receive_channel)
+        for _, receive_channel in memory_channels:
+            nursery.start_soon(send_updates, 'ws://127.0.0.1:8080', receive_channel)
 
-        async for route in load_routes():
+        for route in load_routes():
+            starting_positions = [random.randint(0, len(route['coordinates'])) for _ in range(BUSES_PER_ROUTE)]
+            for starting_position in starting_positions:
+                bus_id = f'{route["name"]}-{starting_position}'
+                send_channel, _ = random.choice(memory_channels)
+                nursery.start_soon(run_bus, route, starting_position, bus_id, send_channel)
 
-            buses_on_route_indexes = [random.randint(0, len(route['coordinates'])) for _ in range(BUSES_PER_ROUTE)]
-
-            for bus_coord in buses_on_route_indexes:
-                bus_id = f'{route["name"]}-{bus_coord}'
-                nursery.start_soon(run_bus, route, bus_coord, bus_id, random.choice(send_channels))
+        logger.info(f'Read 900 routes files')
+        logger.info(f'Started {BUSES_PER_ROUTE*900} buses in total')
 
 
 if __name__ == '__main__':
