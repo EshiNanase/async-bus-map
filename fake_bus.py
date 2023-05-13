@@ -2,14 +2,60 @@ import random
 import json
 import logging
 import os
-from itertools import cycle
+import sys
+from itertools import cycle, islice
 import trio
 from trio_websocket import open_websocket_url
-
-BUSES_PER_ROUTE = 25
-CHANNELS_AMOUNT = 10
+import argparse
+import time
+from decorators import relaunch_on_disconnect
 
 logger = logging.getLogger(__name__)
+
+
+def parse_args():
+
+    parser = argparse.ArgumentParser(description='Fake bus')
+    parser.add_argument(
+        '--server',
+        help='Адрес сервера',
+        default='ws://127.0.0.1:8080'
+    )
+    parser.add_argument(
+        '--routes_number',
+        help='Количество маршрутов',
+        default=100,
+        type=int
+    )
+    parser.add_argument(
+        '--buses_per_route',
+        help='Количество автобусов на маршруте',
+        default=1,
+        type=int
+    )
+    parser.add_argument(
+        '--websocket_number',
+        help='Количество открытых вебсокетов',
+        default=1,
+        type=int
+    )
+    parser.add_argument(
+        '--emulator_id',
+        help='Префикс к busId на случай запуска нескольких экземпляров',
+        default=time.time()
+    )
+    parser.add_argument(
+        '--refresh_timeout',
+        help='Задержка в обновлении координат сервера',
+        default=1,
+        type=int
+    )
+    parser.add_argument(
+        '--verbose',
+        help='Показывать логи',
+        action='store_true'
+    )
+    return parser.parse_args()
 
 
 def load_routes(directory_path='routes'):
@@ -20,51 +66,58 @@ def load_routes(directory_path='routes'):
                 yield json.load(file)
 
 
-async def run_bus(route, start_position, bus_id, send_channel):
+async def run_bus(route, start_position, bus_id, refresh_timeout, send_channel):
 
     cycle_route = route['coordinates'][start_position:] + list(reversed(route['coordinates'][start_position:]))
 
     for lat, lng in cycle(cycle_route):
         bus = {
-            "busId": bus_id,
+            "bus_id": bus_id,
             "lat": lat,
             "lng": lng,
             "route": route['name']
         }
 
         await send_channel.send(bus)
-        await trio.sleep(1)
+        await trio.sleep(refresh_timeout)
 
 
+@relaunch_on_disconnect
 async def send_updates(server_address, receive_channel):
 
-    while True:
-        async with open_websocket_url(server_address) as ws:
-            async for message in receive_channel:
-                await ws.send_message(json.dumps(message, ensure_ascii=True))
+    async with open_websocket_url(server_address) as ws:
+        async for message in receive_channel:
+            await ws.send_message(json.dumps(message, ensure_ascii=True))
 
 
 async def main():
 
-    logging.basicConfig(level=logging.INFO)
+    args = parse_args()
 
-    memory_channels = [trio.open_memory_channel(0) for _ in range(CHANNELS_AMOUNT)]
+    if args.verbose:
+        logging.basicConfig(level=logging.INFO)
+
+    memory_channels = [trio.open_memory_channel(0) for _ in range(args.websocket_number)]
 
     async with trio.open_nursery() as nursery:
 
         for _, receive_channel in memory_channels:
-            nursery.start_soon(send_updates, 'ws://127.0.0.1:8080', receive_channel)
+            nursery.start_soon(send_updates, args.server, receive_channel)
 
-        for route in load_routes():
-            starting_positions = [random.randint(0, len(route['coordinates'])) for _ in range(BUSES_PER_ROUTE)]
+        for route in islice(load_routes(), args.routes_number):
+            starting_positions = [random.randint(0, len(route['coordinates'])) for _ in range(args.buses_per_route)]
+
             for starting_position in starting_positions:
-                bus_id = f'{route["name"]}-{starting_position}'
+                bus_id = f'{route["name"]}-{starting_position}-{args.emulator_id}'
                 send_channel, _ = random.choice(memory_channels)
-                nursery.start_soon(run_bus, route, starting_position, bus_id, send_channel)
+                nursery.start_soon(run_bus, route, starting_position, bus_id, args.refresh_timeout, send_channel)
 
-        logger.info(f'Read 900 routes files')
-        logger.info(f'Started {BUSES_PER_ROUTE*900} buses in total')
+        logger.info(f'Read {args.routes_number} routes files')
+        logger.info(f'Started {args.buses_per_route*args.routes_number} buses in total')
 
 
 if __name__ == '__main__':
-    trio.run(main)
+    try:
+        trio.run(main)
+    except KeyboardInterrupt:
+        sys.stderr.write('Вы закрыли скрипт')
