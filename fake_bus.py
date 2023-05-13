@@ -24,19 +24,19 @@ def parse_args():
     parser.add_argument(
         '--routes_number',
         help='Количество маршрутов',
-        default=100,
+        default=500,
         type=int
     )
     parser.add_argument(
         '--buses_per_route',
         help='Количество автобусов на маршруте',
-        default=1,
+        default=5,
         type=int
     )
     parser.add_argument(
         '--websocket_number',
         help='Количество открытых вебсокетов',
-        default=1,
+        default=5,
         type=int
     )
     parser.add_argument(
