@@ -1,7 +1,9 @@
 from exceptions import BusValidationError
 
 
-def bus_data_is_valid(bus_data):
+def is_valid_bus_data(bus_data):
 
-    if ('busId', 'route', 'lat', 'lng') not in bus_data:
+    valid_keys = ['bus_id', 'lat', 'lng', 'route']
+
+    if valid_keys != list(bus_data.keys()):
         raise BusValidationError

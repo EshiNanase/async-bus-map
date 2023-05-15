@@ -8,7 +8,7 @@ from classes import WindowBounds, Bus
 from dataclasses import asdict
 import argparse
 from exceptions import BusValidationError, NewBoundsValidationError
-from tools import bus_data_is_valid
+from tools import is_valid_bus_data
 
 BUSES = {}
 window_bounds = WindowBounds()
@@ -43,7 +43,7 @@ async def listen_to_updates(request):
     while True:
         try:
             bus_data = json.loads(await ws.get_message())
-            bus_data_is_valid(bus_data)
+            is_valid_bus_data(bus_data)
 
             bus_id = bus_data['bus_id']
             bus = Bus(busId=bus_id, route=bus_data['route'], lat=bus_data['lat'], lng=bus_data['lng'])
@@ -112,8 +112,8 @@ async def main():
         logging.basicConfig(level=logging.INFO)
 
     async with trio.open_nursery() as nursery:
-        nursery.start_soon(partial(serve_websocket, talk_to_browser, '127.0.0.1', args.browser_port, ssl_context=None))
-        nursery.start_soon(partial(serve_websocket, listen_to_updates, '127.0.0.1', args.bus_port, ssl_context=None))
+        nursery.start_soon(serve_websocket, talk_to_browser, '127.0.0.1', args.browser_port, None)
+        nursery.start_soon(serve_websocket, listen_to_updates, '127.0.0.1', args.bus_port, None)
         logging.info('servers were started!')
 
 

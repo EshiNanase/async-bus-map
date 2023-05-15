@@ -1,7 +1,6 @@
 import random
 import json
 import logging
-import os
 import sys
 from itertools import cycle, islice
 import trio
@@ -9,6 +8,7 @@ from trio_websocket import open_websocket_url
 import argparse
 import time
 from decorators import relaunch_on_disconnect
+from glob import glob
 
 logger = logging.getLogger(__name__)
 
@@ -59,11 +59,9 @@ def parse_args():
 
 
 def load_routes(directory_path='routes'):
-    for filename in os.listdir(directory_path):
-        if filename.endswith(".json"):
-            filepath = os.path.join(directory_path, filename)
-            with open(filepath, 'r', encoding='utf8') as file:
-                yield json.load(file)
+    for filepath in glob(f'{directory_path}/*.json'):
+        with open(f'{filepath}', 'r', encoding='utf8') as file:
+            yield json.load(file)
 
 
 async def run_bus(route, start_position, bus_id, refresh_timeout, send_channel):

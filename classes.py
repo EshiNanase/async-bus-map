@@ -19,9 +19,10 @@ class WindowBounds:
 
     def set_bounds(self, bounds):
 
+        valid_keys = ['south_lat', 'north_lat', 'west_lng', 'east_lng']
         if bounds.get('msgType') != 'newBounds':
             raise NewBoundsValidationError
-        if ('south_lat', 'north_lat', 'west_lng', 'east_lng') not in bounds['data']:
+        if valid_keys != list(bounds['data'].keys()):
             raise NewBoundsValidationError
 
         self.south_lat = bounds['data']['south_lat']

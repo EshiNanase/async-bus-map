@@ -50,7 +50,7 @@ async def test_invalid_new_bounds():
 async def test_invalid_bus():
 
     bad_data = {
-        'busId': '123',
+        'bus_id': '123',
         'lat': 123,
         'lng': 123,
         'routee': '123'
