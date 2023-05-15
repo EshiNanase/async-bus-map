@@ -1,6 +1,5 @@
 from dataclasses import dataclass
-import json
-from exceptions import NewBoundsValidationError, BusValidationError
+from exceptions import NewBoundsValidationError
 
 
 class WindowBounds:

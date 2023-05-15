@@ -3,7 +3,6 @@ import sys
 import trio
 from trio_websocket import serve_websocket, ConnectionClosed
 import logging
-from functools import partial
 from classes import WindowBounds, Bus
 from dataclasses import asdict
 import argparse
